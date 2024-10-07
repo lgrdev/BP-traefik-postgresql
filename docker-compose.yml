@@ -1,0 +1,41 @@
+networks:
+  traefik_proxy:
+    external: true
+
+secrets:
+   user_password:
+     file: ./secrets/user_password.secret
+   postgres_password:
+     file: ./secrets/postgres_password.secret
+
+services:
+  postgres:
+    image: postgres:${DB_VERSION}
+    restart: always
+    container_name: postgres
+    secrets:
+      - user_password    
+    environment:
+      - POSTGRES_USER= ${DB_USER}
+      - POSTGRES_PASSWORD= /run/secrets/user_password
+      - PGUSER= postgres
+      - PGPASSWORD= /run/secrets/postgres_password
+      - TZ='Europe/Paris'
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 1m
+      timeout: 10s
+      retries: 3
+      start_period: 30s  
+    networks:
+      - traefik_proxy
+    labels:
+      - traefik.enable=true
+      - traefik.tcp.routers.postgres.rule=HostSNI(`*`)
+      - traefik.tcp.routers.postgres.entrypoints=db-postgres
+      - traefik.tcp.routers.postgres.service=postgres-svc
+      - traefik.tcp.services.postgres-svc.loadbalancer.server.port=5432
+      - traefik.tcp.routers.postgres.middlewares=tcpSecureByIp@file
+    volumes:
+      - ./postgres/data:/var/lib/postgresql/data
+      - ./postgres/conf/my-postgres.conf:/etc/postgresql/postgresql.conf
